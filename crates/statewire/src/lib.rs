@@ -9,6 +9,7 @@
 //! Transports are pluggable; the crate ships the protocol layer and leaves the
 //! socket to the caller or to an optional transport feature.
 
+pub mod document;
 pub mod version;
 
 pub use version::{ProtocolOffer, ProtocolSelection, VersionRange, WIRE_VERSION};
