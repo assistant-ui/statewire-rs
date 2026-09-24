@@ -12,6 +12,13 @@ categories = ["network-programming", "web-programming::websocket"]
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+futures-util = { version = "0.3", optional = true, default-features = false, features = ["sink", "std"] }
+tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"], optional = true }
+tokio-tungstenite = { version = "0.26", optional = true }
 
 [features]
 default = []
+ws = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "io-util"] }
