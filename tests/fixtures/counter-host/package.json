@@ -1,0 +1,12 @@
+{
+  "name": "counter-host-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "statewire": "^0.19.4",
+    "ws": "^8.18.0"
+  }
+}
