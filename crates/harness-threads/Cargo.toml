@@ -1,0 +1,14 @@
+[package]
+name = "harness-threads"
+description = "Rust types for the harness-sdk thread and runs protocols over Statewire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["harness-sdk", "statewire", "agent", "chat", "protocol"]
+categories = ["network-programming", "data-structures"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+statewire = { version = "0.1.0", path = "../statewire" }
