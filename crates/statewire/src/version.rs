@@ -77,10 +77,8 @@ pub fn validate_version(value: &str) -> Result<(), VersionError> {
     if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
         return Err(malformed());
     }
-    if !(is_digit(b[0]) && is_digit(b[1]) && is_digit(b[2]) && is_digit(b[3]))
-        || !(is_digit(b[5]) && is_digit(b[6]))
-        || !(is_digit(b[8]) && is_digit(b[9]))
-    {
+    let digit_positions = [0, 1, 2, 3, 5, 6, 8, 9];
+    if !digit_positions.iter().all(|&i| is_digit(b[i])) {
         return Err(malformed());
     }
     let year: u16 = value[0..4].parse().map_err(|_| malformed())?;
@@ -97,7 +95,8 @@ fn days_in_month(year: u16, month: u8) -> u8 {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
         2 => {
-            let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+            let leap =
+                (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400);
             if leap {
                 29
             } else {
@@ -112,9 +111,10 @@ fn days_in_month(year: u16, month: u8) -> u8 {
 pub fn validate_protocol_name(name: &str) -> Result<(), VersionError> {
     let mut bytes = name.bytes();
     let valid_first = matches!(bytes.next(), Some(b) if b.is_ascii_alphabetic());
-    let valid_rest = name.bytes().skip(1).all(|b| {
-        b.is_ascii_alphanumeric() || b"!#$%&'*+.^_`|~:/-".contains(&b)
-    });
+    let valid_rest = name
+        .bytes()
+        .skip(1)
+        .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+.^_`|~:/-".contains(&b));
     if valid_first && valid_rest {
         Ok(())
     } else {
@@ -125,7 +125,10 @@ pub fn validate_protocol_name(name: &str) -> Result<(), VersionError> {
 impl VersionRange {
     /// An exact-version range.
     pub fn exact(version: impl Into<String>) -> Self {
-        Self { version: version.into(), min_version: None }
+        Self {
+            version: version.into(),
+            min_version: None,
+        }
     }
 
     pub fn validate(&self) -> Result<(), VersionError> {
@@ -203,7 +206,10 @@ pub fn validate_selection(
     let mut seen: Vec<&str> = Vec::with_capacity(selections.len());
     let selected_parent = |name: &str| {
         selections.iter().any(|s| {
-            !s.name.contains('/') && name.strip_prefix(s.name.as_str()).is_some_and(|rest| rest.starts_with('/'))
+            !s.name.contains('/')
+                && name
+                    .strip_prefix(s.name.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
         })
     };
     for selection in selections {
@@ -246,7 +252,11 @@ mod tests {
     }
 
     fn selection(name: &str, version: &str) -> ProtocolSelection {
-        ProtocolSelection { name: name.to_owned(), version: version.to_owned(), record: None }
+        ProtocolSelection {
+            name: name.to_owned(),
+            version: version.to_owned(),
+            record: None,
+        }
     }
 
     #[test]
@@ -258,7 +268,14 @@ mod tests {
 
     #[test]
     fn rejects_invalid_dates() {
-        for v in ["2026-9-13", "2026-13-01", "2025-02-29", "0000-01-01", "2026-09-13T00", "abcd-ef-gh"] {
+        for v in [
+            "2026-9-13",
+            "2026-13-01",
+            "2025-02-29",
+            "0000-01-01",
+            "2026-09-13T00",
+            "abcd-ef-gh",
+        ] {
             assert!(validate_version(v).is_err(), "{v}");
         }
     }
@@ -281,7 +298,10 @@ mod tests {
             version: "2026-09-01".into(),
             min_version: Some("2026-09-13".into()),
         };
-        assert!(matches!(range.validate(), Err(VersionError::ReversedRange { .. })));
+        assert!(matches!(
+            range.validate(),
+            Err(VersionError::ReversedRange { .. })
+        ));
     }
 
     #[test]
@@ -317,13 +337,19 @@ mod tests {
             },
         ];
         let wire = VersionRange::exact(WIRE_VERSION);
-        assert_eq!(validate_selection(&wire, WIRE_VERSION, &offers, &selections), Ok(()));
+        assert_eq!(
+            validate_selection(&wire, WIRE_VERSION, &offers, &selections),
+            Ok(())
+        );
     }
 
     #[test]
     fn unoffered_non_child_is_rejected() {
         let offers = [offer("harness-sdk", "2026-09-13")];
-        let selections = [selection("harness-sdk", "2026-09-13"), selection("acme", "2026-09-13")];
+        let selections = [
+            selection("harness-sdk", "2026-09-13"),
+            selection("acme", "2026-09-13"),
+        ];
         let wire = VersionRange::exact(WIRE_VERSION);
         assert_eq!(
             validate_selection(&wire, WIRE_VERSION, &offers, &selections),
@@ -348,7 +374,10 @@ mod tests {
         let offers = [offer("harness-sdk", "2026-09-13"), acme];
         let selections = [selection("harness-sdk", "2026-09-13")];
         let wire = VersionRange::exact(WIRE_VERSION);
-        assert_eq!(validate_selection(&wire, WIRE_VERSION, &offers, &selections), Ok(()));
+        assert_eq!(
+            validate_selection(&wire, WIRE_VERSION, &offers, &selections),
+            Ok(())
+        );
     }
 
     #[test]

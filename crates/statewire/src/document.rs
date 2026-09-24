@@ -137,14 +137,24 @@ mod tests {
 
     #[test]
     fn meta_is_omitted_when_absent() {
-        let document = EncodedDocument { value: json!({"count": 0}), meta: None };
-        assert_eq!(serde_json::to_string(&document).unwrap(), r#"{"value":{"count":0}}"#);
+        let document = EncodedDocument {
+            value: json!({"count": 0}),
+            meta: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&document).unwrap(),
+            r#"{"value":{"count":0}}"#
+        );
     }
 
     #[test]
     fn resolves_nested_paths() {
         let value = json!({"messages": [{"text": "hi"}]});
-        let path = [PathSeg::from("messages"), PathSeg::from(0), PathSeg::from("text")];
+        let path = [
+            PathSeg::from("messages"),
+            PathSeg::from(0),
+            PathSeg::from("text"),
+        ];
         assert_eq!(resolve(&value, &path), Some(&json!("hi")));
         assert_eq!(resolve(&value, &[PathSeg::from("missing")]), None);
     }
@@ -154,14 +164,26 @@ mod tests {
         for (value, expected) in [
             (json!({"at": "2026-09-05T12:00:00Z"}), Ok(())),
             (json!({"at": "2026-09-05T12:00:00.5Z"}), Ok(())),
-            (json!({"at": "2026-09-05 12:00:00Z"}), Err(DocumentError::InvalidDate("2026-09-05 12:00:00Z".into()))),
-            (json!({"at": "2026-09-05T25:00:00Z"}), Err(DocumentError::InvalidDate("2026-09-05T25:00:00Z".into()))),
-            (json!({"at": "2026-09-05T12:00:00"}), Err(DocumentError::InvalidDate("2026-09-05T12:00:00".into()))),
+            (
+                json!({"at": "2026-09-05 12:00:00Z"}),
+                Err(DocumentError::InvalidDate("2026-09-05 12:00:00Z".into())),
+            ),
+            (
+                json!({"at": "2026-09-05T25:00:00Z"}),
+                Err(DocumentError::InvalidDate("2026-09-05T25:00:00Z".into())),
+            ),
+            (
+                json!({"at": "2026-09-05T12:00:00"}),
+                Err(DocumentError::InvalidDate("2026-09-05T12:00:00".into())),
+            ),
             (json!({"at": 5}), Err(DocumentError::DateNotString)),
         ] {
             let document = EncodedDocument {
                 value,
-                meta: Some(vec![MetaEntry { path: vec![PathSeg::from("at")], kind: MetaKind::Date }]),
+                meta: Some(vec![MetaEntry {
+                    path: vec![PathSeg::from("at")],
+                    kind: MetaKind::Date,
+                }]),
             };
             assert_eq!(validate(&document), expected);
         }
@@ -183,7 +205,10 @@ mod tests {
     fn dangling_meta_path_is_rejected() {
         let document = EncodedDocument {
             value: json!({}),
-            meta: Some(vec![MetaEntry { path: vec![PathSeg::from("at")], kind: MetaKind::Date }]),
+            meta: Some(vec![MetaEntry {
+                path: vec![PathSeg::from("at")],
+                kind: MetaKind::Date,
+            }]),
         };
         assert_eq!(validate(&document), Err(DocumentError::DanglingMetaPath));
     }

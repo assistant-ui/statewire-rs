@@ -11,7 +11,12 @@
 
 pub mod document;
 pub mod patch;
-pub mod wire;
+pub mod session;
 pub mod version;
+pub mod wire;
 
+pub use document::{EncodedDocument, MetaEntry, PathSeg};
+pub use patch::{DocumentTable, Op};
+pub use session::{Config, Event, FinAction, Session, SessionError};
 pub use version::{ProtocolOffer, ProtocolSelection, VersionRange, WIRE_VERSION};
+pub use wire::{Answer, Fin, FinReason, Frame, Packet, Statement, Verdict};

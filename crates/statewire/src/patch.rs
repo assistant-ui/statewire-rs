@@ -120,7 +120,9 @@ impl DocumentTable {
 
     /// The main document mounted for `protocol`, when present.
     pub fn main(&self, protocol: &str) -> Option<&Document> {
-        self.documents.values().find(|d| d.main && d.protocol == protocol)
+        self.documents
+            .values()
+            .find(|d| d.main && d.protocol == protocol)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (u64, &Document)> {
@@ -138,7 +140,14 @@ impl DocumentTable {
         let mut new_warnings = Vec::new();
         for op in ops {
             match op {
-                Op::Mount { doc, protocol, main, key, value, meta: _ } => {
+                Op::Mount {
+                    doc,
+                    protocol,
+                    main,
+                    key,
+                    value,
+                    meta: _,
+                } => {
                     if self.documents.contains_key(doc) {
                         return Err(PatchError::AlreadyMounted(*doc));
                     }
@@ -160,11 +169,21 @@ impl DocumentTable {
                         .remove(doc)
                         .ok_or(PatchError::UnmountedDocument(*doc))?;
                 }
-                Op::Add { doc, path, value, meta: _ } => {
+                Op::Add {
+                    doc,
+                    path,
+                    value,
+                    meta: _,
+                } => {
                     let root = self.value_mut(*doc)?;
                     add(root, path, value)?;
                 }
-                Op::Replace { doc, path, value, meta: _ } => {
+                Op::Replace {
+                    doc,
+                    path,
+                    value,
+                    meta: _,
+                } => {
                     let root = self.value_mut(*doc)?;
                     replace(root, path, value)?;
                 }
@@ -191,16 +210,15 @@ impl DocumentTable {
 }
 
 fn descend<'v>(root: &'v mut Value, path: &[PathSeg]) -> Result<&'v mut Value, PatchError> {
-    path.iter().try_fold(root, |current, seg| match (current, seg) {
-        (Value::Object(map), PathSeg::Key(key)) => {
-            map.get_mut(key).ok_or(PatchError::BadPath)
-        }
-        (Value::Array(items), PathSeg::Index(index)) => {
-            items.get_mut(*index).ok_or(PatchError::BadPath)
-        }
-        (Value::Object(_) | Value::Array(_), _) => Err(PatchError::BadPath),
-        _ => Err(PatchError::NotAContainer),
-    })
+    path.iter()
+        .try_fold(root, |current, seg| match (current, seg) {
+            (Value::Object(map), PathSeg::Key(key)) => map.get_mut(key).ok_or(PatchError::BadPath),
+            (Value::Array(items), PathSeg::Index(index)) => {
+                items.get_mut(*index).ok_or(PatchError::BadPath)
+            }
+            (Value::Object(_) | Value::Array(_), _) => Err(PatchError::BadPath),
+            _ => Err(PatchError::NotAContainer),
+        })
 }
 
 fn add(root: &mut Value, path: &[PathSeg], value: &Value) -> Result<(), PatchError> {
@@ -221,8 +239,8 @@ fn add(root: &mut Value, path: &[PathSeg], value: &Value) -> Result<(), PatchErr
             let Value::String(inserted) = value else {
                 return Err(PatchError::BadStringInsert);
             };
-            let byte_position = code_point_offset(text, *position)
-                .ok_or(PatchError::BadStringInsert)?;
+            let byte_position =
+                code_point_offset(text, *position).ok_or(PatchError::BadStringInsert)?;
             text.insert_str(byte_position, inserted);
             Ok(())
         }
@@ -318,7 +336,12 @@ mod tests {
 
     #[test]
     fn doc_zero_is_omitted_on_serialize() {
-        let op = Op::Replace { doc: 0, path: vec![PathSeg::from("count")], value: json!(1), meta: None };
+        let op = Op::Replace {
+            doc: 0,
+            path: vec![PathSeg::from("count")],
+            value: json!(1),
+            meta: None,
+        };
         assert_eq!(
             serde_json::to_string(&op).unwrap(),
             r#"{"op":"replace","path":["count"],"value":1}"#
@@ -330,9 +353,24 @@ mod tests {
         let mut table = mounted(json!({"count": 0, "items": ["a", "c"], "text": "Hello"}));
         table
             .apply(&[
-                Op::Replace { doc: 0, path: vec![PathSeg::from("count")], value: json!(1), meta: None },
-                Op::Add { doc: 0, path: vec![PathSeg::from("items"), PathSeg::from(1)], value: json!("b"), meta: None },
-                Op::Add { doc: 0, path: vec![PathSeg::from("text"), PathSeg::from(5)], value: json!(" world"), meta: None },
+                Op::Replace {
+                    doc: 0,
+                    path: vec![PathSeg::from("count")],
+                    value: json!(1),
+                    meta: None,
+                },
+                Op::Add {
+                    doc: 0,
+                    path: vec![PathSeg::from("items"), PathSeg::from(1)],
+                    value: json!("b"),
+                    meta: None,
+                },
+                Op::Add {
+                    doc: 0,
+                    path: vec![PathSeg::from("text"), PathSeg::from(5)],
+                    value: json!(" world"),
+                    meta: None,
+                },
             ])
             .unwrap();
         assert_eq!(
@@ -345,10 +383,20 @@ mod tests {
     fn replace_whole_document_and_new_keys() {
         let mut table = mounted(json!({"count": 0}));
         table
-            .apply(&[Op::Replace { doc: 0, path: vec![PathSeg::from("fresh")], value: json!(true), meta: None }])
+            .apply(&[Op::Replace {
+                doc: 0,
+                path: vec![PathSeg::from("fresh")],
+                value: json!(true),
+                meta: None,
+            }])
             .unwrap();
         table
-            .apply(&[Op::Replace { doc: 0, path: vec![], value: json!({"reset": true}), meta: None }])
+            .apply(&[Op::Replace {
+                doc: 0,
+                path: vec![],
+                value: json!({"reset": true}),
+                meta: None,
+            }])
             .unwrap();
         assert_eq!(table.get(0).unwrap().value, json!({"reset": true}));
     }
@@ -369,7 +417,10 @@ mod tests {
     fn remove_shifts_list_items() {
         let mut table = mounted(json!({"items": ["a", "b", "c"]}));
         table
-            .apply(&[Op::Remove { doc: 0, path: vec![PathSeg::from("items"), PathSeg::from(1)] }])
+            .apply(&[Op::Remove {
+                doc: 0,
+                path: vec![PathSeg::from("items"), PathSeg::from(1)],
+            }])
             .unwrap();
         assert_eq!(table.get(0).unwrap().value, json!({"items": ["a", "c"]}));
     }

@@ -221,7 +221,10 @@ mod tests {
             meta: None,
         };
         assert_eq!(
-            serde_json::to_string(&Frame { cmd: vec![statement] }).unwrap(),
+            serde_json::to_string(&Frame {
+                cmd: vec![statement]
+            })
+            .unwrap(),
             r#"{"cmd":[{"seq":1,"protocol":"default","method":"increment","params":[1]}]}"#
         );
     }
@@ -274,7 +277,13 @@ mod tests {
     #[test]
     fn terminal_verdicts() {
         assert!(!Verdict::Applied.is_terminal());
-        for verdict in [Verdict::Result, Verdict::Rejected, Verdict::Failed, Verdict::Crashed, Verdict::Expired] {
+        for verdict in [
+            Verdict::Result,
+            Verdict::Rejected,
+            Verdict::Failed,
+            Verdict::Crashed,
+            Verdict::Expired,
+        ] {
             assert!(verdict.is_terminal());
         }
     }
