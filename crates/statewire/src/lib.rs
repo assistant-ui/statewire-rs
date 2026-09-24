@@ -10,6 +10,7 @@
 //! socket to the caller or to an optional transport feature.
 
 pub mod document;
+pub mod patch;
 pub mod version;
 
 pub use version::{ProtocolOffer, ProtocolSelection, VersionRange, WIRE_VERSION};
