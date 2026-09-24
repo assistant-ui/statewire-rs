@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/statewire"]
+members = ["crates/harness-threads", "crates/statewire"]
 resolver = "2"
 
 [workspace.package]
