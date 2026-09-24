@@ -12,6 +12,7 @@
 pub mod document;
 pub mod patch;
 pub mod session;
+pub mod transport;
 pub mod version;
 pub mod wire;
 
