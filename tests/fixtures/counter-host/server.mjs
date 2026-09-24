@@ -6,6 +6,7 @@
 // Prints "listening <port>" once the socket is accepting connections.
 
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { StatewireSocketHost } from "statewire/host-internal";
 import { createCounterElement } from "statewire/testing";
@@ -15,8 +16,39 @@ const CLIENT_ID = /^[A-Za-z0-9._~-]{1,256}$/;
 
 const host = StatewireSocketHost(createCounterElement());
 
-const server = createServer((_request, response) => {
-  response.writeHead(404).end();
+const server = createServer(async (request, response) => {
+  const url = new URL(request.url, "http://localhost");
+  const serve = url.pathname.endsWith("/stream")
+    ? host.stream.bind(host)
+    : url.pathname.endsWith("/frames")
+      ? host.frames.bind(host)
+      : null;
+  if (serve === null) {
+    response.writeHead(404).end();
+    return;
+  }
+  const body =
+    request.method === "GET" || request.method === "HEAD"
+      ? undefined
+      : Readable.toWeb(request);
+  const result = await serve(
+    new Request(url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+      duplex: "half",
+    }),
+  );
+  response.writeHead(
+    result.status,
+    Object.fromEntries(result.headers.entries()),
+  );
+  if (result.body === null) {
+    response.end();
+    return;
+  }
+  for await (const chunk of result.body) response.write(chunk);
+  response.end();
 });
 
 const wss = new WebSocketServer({
