@@ -11,6 +11,7 @@
 
 pub mod document;
 pub mod patch;
+pub mod wire;
 pub mod version;
 
 pub use version::{ProtocolOffer, ProtocolSelection, VersionRange, WIRE_VERSION};
