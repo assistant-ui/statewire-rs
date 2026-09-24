@@ -1,8 +1,11 @@
 # statewire-rs
 
-Rust client for the [Statewire](https://github.com/assistant-ui/harness-sdk) protocol: one JSON document table replicated from a host to any number of clients, with typed commands back.
+Rust clients for the [harness-sdk](https://github.com/assistant-ui/harness-sdk) wire protocols.
 
-This crate implements the client side of the wire contract — document encoding, statepatch application, frame/packet envelopes, protocol negotiation, and the session state machine (lanes, sequence clocks, admission recovery). Transports are pluggable.
+| Crate | What it is |
+| --- | --- |
+| `statewire` | Client for the Statewire protocol: one JSON document table replicated from a host, typed commands back. Document encoding, statepatch application, envelopes, negotiation, the sans-IO session state machine, and `ws` / `http` transports. |
+| `harness-threads` | Types for the harness-sdk thread and runs protocols on top of `statewire`: the main document, message documents, run states, and the `run/*` / `thread/*` commands. Bindings only — all behavior lives in the host. |
 
 ## Status
 
