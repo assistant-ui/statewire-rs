@@ -15,10 +15,12 @@ thiserror.workspace = true
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["sink", "std"] }
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"], optional = true }
 tokio-tungstenite = { version = "0.26", optional = true }
+reqwest = { version = "0.12", optional = true, default-features = false, features = ["stream", "rustls-tls"] }
 
 [features]
 default = []
 ws = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite"]
+http = ["dep:futures-util", "dep:tokio", "dep:reqwest"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "io-util"] }
