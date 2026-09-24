@@ -19,5 +19,5 @@ jobs:
       - run: npm install --no-audit --no-fund
         working-directory: tests/fixtures/counter-host
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --features ws,http -- -D warnings
-      - run: cargo test --features ws,http
+      - run: cargo clippy --workspace --all-targets --features statewire/ws,statewire/http -- -D warnings
+      - run: cargo test --workspace --features statewire/ws,statewire/http
