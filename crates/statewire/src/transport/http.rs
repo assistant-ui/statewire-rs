@@ -32,6 +32,10 @@ const POST_TIMEOUT: Duration = Duration::from_secs(30);
 pub enum HttpError {
     #[error("invalid url: {0}")]
     InvalidUrl(String),
+    #[error("request header is managed by the transport: {0}")]
+    ReservedHeader(String),
+    #[error("could not create HTTP client")]
+    Client,
 }
 
 /// Connects to `url` (the instance URL, without the `/stream` suffix) and
@@ -40,16 +44,74 @@ pub async fn connect(
     url: &str,
     config: Config,
 ) -> Result<(Client, mpsc::UnboundedReceiver<Event>), HttpError> {
+    connect_with_headers(url, config, reqwest::header::HeaderMap::new()).await
+}
+
+/// Connects with application headers on both stream and frame requests.
+///
+/// Headers are captured for this connection, including reattaches. To rotate
+/// credentials, drop the client and connect again with fresh headers. A 401 or
+/// 403 stops the transport; credentials are never refreshed implicitly.
+/// Redirects are refused so application credentials cannot cross origins.
+/// Transport/protocol headers cannot be overridden. Mark secret header values
+/// sensitive before passing them in to avoid exposing them in caller logs.
+pub async fn connect_with_headers(
+    url: &str,
+    config: Config,
+    headers: reqwest::header::HeaderMap,
+) -> Result<(Client, mpsc::UnboundedReceiver<Event>), HttpError> {
     let url = url.trim_end_matches('/').to_owned();
-    reqwest::Url::parse(&format!("{url}/stream"))
-        .map_err(|error| HttpError::InvalidUrl(error.to_string()))?;
+    let parsed =
+        reqwest::Url::parse(&url).map_err(|error| HttpError::InvalidUrl(error.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(HttpError::InvalidUrl(
+            "expected an HTTP(S) instance URL without credentials, query, or fragment".into(),
+        ));
+    }
+    for name in headers.keys() {
+        if name.as_str().starts_with("statewire-")
+            || matches!(
+                name.as_str(),
+                "host"
+                    | "content-type"
+                    | "content-length"
+                    | "accept"
+                    | "connection"
+                    | "transfer-encoding"
+                    | "upgrade"
+                    | "te"
+                    | "trailer"
+            )
+        {
+            return Err(HttpError::ReservedHeader(name.to_string()));
+        }
+    }
+    let http = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .default_headers(headers)
+        .build()
+        .map_err(|_| HttpError::Client)?;
 
     let session = Arc::new(Mutex::new(Session::new(config)));
     let wake = Arc::new(Notify::new());
     let (events_tx, events_rx) = mpsc::unbounded_channel();
     let (stop_tx, stop_rx) = mpsc::channel(1);
 
-    tokio::spawn(run(url, session.clone(), wake.clone(), events_tx, stop_rx));
+    tokio::spawn(run(
+        http,
+        url,
+        session.clone(),
+        wake.clone(),
+        events_tx,
+        stop_rx,
+    ));
 
     Ok((
         Client {
@@ -62,18 +124,13 @@ pub async fn connect(
 }
 
 async fn run(
+    http: reqwest::Client,
     url: String,
     session: Arc<Mutex<Session>>,
     wake: Arc<Notify>,
     events: mpsc::UnboundedSender<Event>,
     mut stop: mpsc::Receiver<()>,
 ) {
-    let Ok(http) = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-    else {
-        return;
-    };
     let mut attempt: u32 = 0;
     let mut min_delay = Duration::ZERO;
     loop {
@@ -149,7 +206,7 @@ async fn attach(
     };
     match response.status().as_u16() {
         200 => {}
-        401 | 403 | 400 | 404 | 406 | 410 => {
+        300..=399 | 401 | 403 | 400 | 404 | 406 | 410 => {
             return Attach::Fin(FinAction::Stop { is_error: true })
         }
         _ => return Attach::TransportFault,
@@ -378,7 +435,7 @@ async fn post_statements(
                 Some(refusal) => Ok(Some(refusal)),
             }
         }
-        400 => Err(PostOutcome::Stop),
+        300..=399 | 400 | 401 | 403 | 404 | 406 | 410 => Err(PostOutcome::Stop),
         _ => Err(PostOutcome::Fault),
     }
 }
