@@ -16,8 +16,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
         working-directory: tests/fixtures/counter-host
       - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets --features statewire/ws,statewire/http -- -D warnings
-      - run: cargo test --workspace --features statewire/ws,statewire/http
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo test -p statewire --features http --locked
+      - run: cargo test -p statewire --features ws --locked
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo doc --workspace --all-features --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo package -p statewire --all-features --locked
