@@ -160,7 +160,7 @@ async fn attach(
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut decoder = SseDecoder::default();
 
     let mut last_receive = Instant::now();
     let mut timer = interval(Duration::from_secs(1));
@@ -187,15 +187,12 @@ async fn attach(
                     Some(Err(_)) | None => return Attach::TransportFault,
                 };
                 last_receive = Instant::now();
-                let Ok(text) = std::str::from_utf8(&bytes) else {
-                    return Attach::TransportFault;
-                };
-                buffer.push_str(text);
-                while let Some(boundary) = buffer.find("\n\n") {
-                    let block = buffer[..boundary].to_owned();
-                    buffer.drain(..boundary + 2);
-                    let Some(payload) = sse_data(&block) else {
-                        continue;
+                decoder.push(&bytes);
+                loop {
+                    let payload = match decoder.next_data() {
+                        Ok(Some(payload)) => payload,
+                        Ok(None) => break,
+                        Err(_) => return Attach::TransportFault,
                     };
                     let packet: Packet = match serde_json::from_str(&payload) {
                         Ok(packet) => packet,
@@ -233,6 +230,45 @@ async fn attach(
                 }
             }
         }
+    }
+}
+
+/// Buffers bytes until a complete event arrives. Network chunks need not end
+/// on a UTF-8 boundary, and SSE accepts LF, CRLF, and CR line endings.
+#[derive(Default)]
+struct SseDecoder {
+    buffer: Vec<u8>,
+    skip_lf: bool,
+    started: bool,
+}
+
+impl SseDecoder {
+    fn push(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            let skip = self.skip_lf && byte == b'\n';
+            self.skip_lf = byte == b'\r';
+            if !skip {
+                self.buffer.push(if byte == b'\r' { b'\n' } else { byte });
+            }
+        }
+    }
+
+    fn next_data(&mut self) -> Result<Option<String>, std::str::Utf8Error> {
+        while let Some(boundary) = self.buffer.windows(2).position(|pair| pair == b"\n\n") {
+            let block = std::str::from_utf8(&self.buffer[..boundary])?;
+            let block = if self.started {
+                block
+            } else {
+                block.strip_prefix('\u{feff}').unwrap_or(block)
+            };
+            let data = sse_data(block);
+            self.started = true;
+            self.buffer.drain(..boundary + 2);
+            if data.is_some() {
+                return Ok(data);
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -349,7 +385,53 @@ async fn post_statements(
 
 #[cfg(test)]
 mod tests {
-    use super::sse_data;
+    use super::{sse_data, SseDecoder};
+
+    #[test]
+    fn decodes_unicode_and_line_endings_at_every_chunk_size() {
+        for ending in ["\n", "\r\n", "\r"] {
+            let stream = [
+                "\u{feff}: ping",
+                "",
+                "data: {\"text\":\"café 🦀\"}",
+                "",
+                "data: first",
+                "data: second",
+                "",
+                "",
+            ]
+            .join(ending);
+            for size in 1..=stream.len() {
+                let mut decoder = SseDecoder::default();
+                let mut events = Vec::new();
+                for chunk in stream.as_bytes().chunks(size) {
+                    decoder.push(chunk);
+                    while let Some(data) = decoder.next_data().unwrap() {
+                        events.push(data);
+                    }
+                }
+                assert_eq!(events, ["{\"text\":\"café 🦀\"}", "first\nsecond"]);
+            }
+        }
+    }
+
+    #[test]
+    fn waits_for_complete_event_before_decoding_utf8() {
+        let mut decoder = SseDecoder::default();
+        decoder.push(b"data: \xf0\x9f");
+        assert_eq!(decoder.next_data().unwrap(), None);
+        decoder.push(b"\xa6\x80\n");
+        assert_eq!(decoder.next_data().unwrap(), None);
+        decoder.push(b"\n");
+        assert_eq!(decoder.next_data().unwrap(), Some("🦀".into()));
+    }
+
+    #[test]
+    fn rejects_invalid_utf8_in_complete_events() {
+        let mut decoder = SseDecoder::default();
+        decoder.push(b"data: \xff\n\n");
+        assert!(decoder.next_data().is_err());
+    }
 
     #[test]
     fn parses_data_events_and_skips_comments() {

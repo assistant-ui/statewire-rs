@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "../../README.md"
 keywords = ["statewire", "sync", "replication", "websocket", "harness-sdk"]
 categories = ["network-programming", "web-programming::websocket"]
 
@@ -14,13 +15,17 @@ serde_json.workspace = true
 thiserror.workspace = true
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["sink", "std"] }
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"], optional = true }
-tokio-tungstenite = { version = "0.26", optional = true }
+tokio-tungstenite = { version = "0.26", optional = true, features = ["rustls-tls-webpki-roots"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["stream", "rustls-tls"] }
 
 [features]
 default = []
-ws = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite"]
+ws = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite", "dep:rustls"]
 http = ["dep:futures-util", "dep:tokio", "dep:reqwest"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "io-util"] }

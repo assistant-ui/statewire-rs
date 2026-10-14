@@ -5,10 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "../../README.md"
 keywords = ["harness-sdk", "statewire", "agent", "chat", "protocol"]
 categories = ["network-programming", "data-structures"]
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-statewire = { version = "0.1.0", path = "../statewire" }
+statewire = { version = "0.1.1", path = "../statewire" }

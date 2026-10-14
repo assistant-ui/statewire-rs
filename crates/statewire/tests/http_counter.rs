@@ -1,8 +1,7 @@
 //! Live round trip against a real statewire host over StatewireHttp.
 //!
 //! Points at `STATEWIRE_HTTP_URL` (the instance URL, without `/stream`) when
-//! set; otherwise spawns the counter fixture and skips when node or its
-//! dependencies are unavailable.
+//! set; otherwise spawns the counter fixture and requires Node.js and the fixture dependencies.
 
 #![cfg(feature = "http")]
 
@@ -21,34 +20,40 @@ struct Fixture {
     child: Option<tokio::process::Child>,
 }
 
-async fn fixture() -> Option<Fixture> {
+async fn fixture() -> Fixture {
     if let Ok(url) = std::env::var("STATEWIRE_HTTP_URL") {
-        return Some(Fixture { url, child: None });
+        return Fixture { url, child: None };
     }
     let dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/counter-host");
-    if !dir.join("node_modules").exists() {
-        eprintln!("skipping: fixture dependencies not installed (run npm install)");
-        return None;
-    }
+    assert!(
+        dir.join("node_modules/statewire").exists(),
+        "fixture dependencies missing: run npm ci --prefix tests/fixtures/counter-host"
+    );
     let mut child = tokio::process::Command::new("node")
         .arg("server.mjs")
         .arg("0")
         .current_dir(&dir)
         .stdout(Stdio::piped())
+        .kill_on_drop(true)
         .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
+        .expect("failed to start the counter fixture; install Node.js");
+    let stdout = child.stdout.take().expect("fixture stdout is piped");
     let mut lines = BufReader::new(stdout).lines();
     let line = timeout(Duration::from_secs(10), lines.next_line())
         .await
-        .ok()?
-        .ok()??;
-    let port = line.strip_prefix("listening ")?.trim().to_owned();
-    Some(Fixture {
+        .expect("counter fixture did not start within 10 seconds")
+        .expect("could not read counter fixture output")
+        .expect("counter fixture exited before listening");
+    let port = line
+        .strip_prefix("listening ")
+        .expect("unexpected counter fixture startup output")
+        .trim()
+        .to_owned();
+    Fixture {
         url: format!("http://127.0.0.1:{port}/threads/t1"),
         child: Some(child),
-    })
+    }
 }
 
 fn config() -> Config {
@@ -72,9 +77,7 @@ async fn next_event(events: &mut UnboundedReceiver<Event>) -> Event {
 
 #[tokio::test]
 async fn increments_the_live_counter_over_http() {
-    let Some(mut fixture) = fixture().await else {
-        return;
-    };
+    let mut fixture = fixture().await;
 
     let (client, mut events) = connect(&fixture.url, config()).await.unwrap();
 

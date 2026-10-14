@@ -1,8 +1,7 @@
 //! Live round trip against a real statewire host (the node counter fixture).
 //!
 //! Points at `STATEWIRE_WS_URL` when set; otherwise spawns
-//! `tests/fixtures/counter-host/server.mjs` and skips when node or the
-//! fixture's dependencies are unavailable.
+//! `tests/fixtures/counter-host/server.mjs` and requires Node.js and the fixture dependencies.
 
 #![cfg(feature = "ws")]
 
@@ -12,7 +11,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use statewire::transport::ws::{connect, generate_client_id};
 use statewire::{Config, Event, ProtocolOffer, Verdict, VersionRange, WIRE_VERSION};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::timeout;
 
@@ -21,34 +20,40 @@ struct Fixture {
     child: Option<tokio::process::Child>,
 }
 
-async fn fixture() -> Option<Fixture> {
+async fn fixture() -> Fixture {
     if let Ok(url) = std::env::var("STATEWIRE_WS_URL") {
-        return Some(Fixture { url, child: None });
+        return Fixture { url, child: None };
     }
     let dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/counter-host");
-    if !dir.join("node_modules").exists() {
-        eprintln!("skipping: fixture dependencies not installed (run npm install)");
-        return None;
-    }
+    assert!(
+        dir.join("node_modules/statewire").exists(),
+        "fixture dependencies missing: run npm ci --prefix tests/fixtures/counter-host"
+    );
     let mut child = tokio::process::Command::new("node")
         .arg("server.mjs")
         .arg("0")
         .current_dir(&dir)
         .stdout(Stdio::piped())
+        .kill_on_drop(true)
         .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
+        .expect("failed to start the counter fixture; install Node.js");
+    let stdout = child.stdout.take().expect("fixture stdout is piped");
     let mut lines = BufReader::new(stdout).lines();
     let line = timeout(Duration::from_secs(10), lines.next_line())
         .await
-        .ok()?
-        .ok()??;
-    let port = line.strip_prefix("listening ")?.trim().to_owned();
-    Some(Fixture {
+        .expect("counter fixture did not start within 10 seconds")
+        .expect("could not read counter fixture output")
+        .expect("counter fixture exited before listening");
+    let port = line
+        .strip_prefix("listening ")
+        .expect("unexpected counter fixture startup output")
+        .trim()
+        .to_owned();
+    Fixture {
         url: format!("ws://127.0.0.1:{port}/ws"),
         child: Some(child),
-    })
+    }
 }
 
 fn config() -> Config {
@@ -70,11 +75,28 @@ async fn next_event(events: &mut UnboundedReceiver<Event>) -> Event {
         .expect("event stream ended")
 }
 
+/// A ws-only build must have a TLS backend and crypto provider even when
+/// reqwest (the HTTP feature) is not present to enable them transitively.
+#[tokio::test]
+async fn secure_websocket_starts_a_tls_handshake() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("wss://{}/ws", listener.local_addr().unwrap());
+    let (client, _events) = connect(&url, config()).await.unwrap();
+    timeout(Duration::from_secs(5), async {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut prefix = [0; 3];
+        stream.read_exact(&mut prefix).await.unwrap();
+        // TLS handshake record, followed by the TLS major version.
+        assert_eq!(&prefix[..2], &[0x16, 0x03]);
+    })
+    .await
+    .expect("WSS did not send a TLS ClientHello");
+    drop(client);
+}
+
 #[tokio::test]
 async fn increments_the_live_counter() {
-    let Some(mut fixture) = fixture().await else {
-        return;
-    };
+    let mut fixture = fixture().await;
 
     let (client, mut events) = connect(&fixture.url, config()).await.unwrap();
 
