@@ -15,7 +15,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26.13.0
       - run: npm ci --no-audit --no-fund
         working-directory: tests/fixtures/counter-host
       - run: cargo fmt --check
