@@ -30,6 +30,15 @@ runtime. A transport's `connect` returns a handle and event receiver; wait for
 `Event::Connected` before treating the replicated state as ready. Dropping the
 handle stops the transport task.
 
+On the development branch, `http::connect_with_headers(url, config, headers)`
+accepts a `reqwest::header::HeaderMap` for application authentication. The same
+headers accompany stream and command requests, including reattaches. Mark
+credential values sensitive. Statewire and HTTP framing headers are reserved.
+Redirects are refused; 401/403 end the transport without replaying commands.
+To rotate a credential, drop the client and establish a new connection with
+fresh headers, checking the replicated run before resubmitting a prompt.
+This additive API is not part of the published 0.1.1 release yet.
+
 This release targets wire protocol `2026-09-13` and is tested against the
 JavaScript `statewire` 0.19.4 host. Rust crate versions are independent of the
 wire protocol version. The protocol specs live in the harness-sdk docs.

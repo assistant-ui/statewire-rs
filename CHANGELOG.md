@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add `http::connect_with_headers` for application headers on streams and frames.
+- Protect protocol headers and refuse redirects to avoid forwarding credentials.
+- Stop HTTP transports on authorization refusals, including frame submissions.
+
 ## 0.1.1
 
 - Preserve HTTP/SSE events when network chunks split a UTF-8 character.
