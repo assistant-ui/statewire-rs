@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::patch::{DocumentTable, PatchError};
+use crate::values::{check_write, receive_packet, TooDeep, ValueError};
 use crate::version::{
     validate_selection, LaneRecord, ProtocolOffer, ProtocolSelection, VersionError, VersionRange,
 };
@@ -81,6 +82,8 @@ pub enum SessionError {
     Negotiation(#[from] VersionError),
     #[error(transparent)]
     Patch(#[from] PatchError),
+    #[error(transparent)]
+    TooDeep(#[from] TooDeep),
 }
 
 #[derive(Debug)]
@@ -185,7 +188,13 @@ impl Session {
     ///
     /// Commands may be queued before the first hello; they are sent once the
     /// lane is negotiated.
-    pub fn command(&mut self, protocol: &str, method: &str, params: Vec<Value>) -> u64 {
+    pub fn command(
+        &mut self,
+        protocol: &str,
+        method: &str,
+        params: Vec<Value>,
+    ) -> Result<u64, ValueError> {
+        check_write(&Value::Array(params.clone()), &format!("{method} params"))?;
         let lane = self.lanes.entry(protocol.to_owned()).or_insert(Lane {
             record: None,
             next_seq: 1,
@@ -205,7 +214,7 @@ impl Session {
             posted: false,
             applied_seen: false,
         });
-        seq
+        Ok(seq)
     }
 
     /// The next frame to send, or `None` when nothing is ready.
@@ -269,7 +278,8 @@ impl Session {
     }
 
     /// Processes one server packet, returning events in order.
-    pub fn handle_packet(&mut self, packet: Packet) -> Result<Vec<Event>, SessionError> {
+    pub fn handle_packet(&mut self, mut packet: Packet) -> Result<Vec<Event>, SessionError> {
+        receive_packet(&mut packet)?;
         if packet.is_heartbeat() {
             return Ok(Vec::new());
         }
@@ -591,7 +601,9 @@ mod tests {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
 
-        let seq = session.command("default", "increment", vec![json!(1)]);
+        let seq = session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
         assert_eq!(seq, 1);
         let frame = session.next_frame().unwrap();
         assert_eq!(frame.cmd.len(), 1);
@@ -620,7 +632,9 @@ mod tests {
     fn answers_deferred_by_next_wait_for_ops() {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
-        session.command("default", "increment", vec![json!(1)]);
+        session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
         session.next_frame().unwrap();
 
         let events = session
@@ -651,7 +665,9 @@ mod tests {
     fn disconnect_resends_durable_commands() {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
-        session.command("default", "increment", vec![json!(1)]);
+        session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
         session.next_frame().unwrap();
 
         let events = session.on_disconnect();
@@ -667,7 +683,9 @@ mod tests {
     fn refusal_with_retry_asks_for_delay() {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
-        session.command("default", "increment", vec![json!(1)]);
+        session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
         session.next_frame().unwrap();
 
         let events = session
@@ -685,7 +703,9 @@ mod tests {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
         for _ in 0..4 {
-            session.command("default", "increment", vec![json!(1)]);
+            session
+                .command("default", "increment", vec![json!(1)])
+                .unwrap();
         }
         session.next_frame().unwrap();
 
@@ -712,7 +732,9 @@ mod tests {
     fn fin_gone_fails_pending_and_stops() {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
-        session.command("default", "increment", vec![json!(1)]);
+        session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
 
         let events = session
             .handle_packet(packet(
@@ -737,7 +759,9 @@ mod tests {
     fn fin_reconnect_keeps_durable_commands() {
         let mut session = Session::new(config());
         session.handle_packet(hello()).unwrap();
-        session.command("default", "increment", vec![json!(1)]);
+        session
+            .command("default", "increment", vec![json!(1)])
+            .unwrap();
 
         let events = session
             .handle_packet(packet(r#"{"fin":{"reason":"reconnect","retry":5000}}"#))

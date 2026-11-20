@@ -1,0 +1,218 @@
+{
+  "markers": {
+    "undefined": "JS undefined (TypeScript only)",
+    "hole": "an array hole (TypeScript only; only as an array item)",
+    "NaN": "NaN",
+    "Infinity": "Infinity",
+    "-Infinity": "-Infinity",
+    "unsafe": "the integer 2 ** 53",
+    "function": "a function",
+    "bigint": "a BigInt (TypeScript only)",
+    "instance": "an instance of a class",
+    "cycle": "the object that holds it"
+  },
+  "cases": [
+    {
+      "name": "plain data is itself",
+      "input": {
+        "a": [1, 1.5, "x", true, false, null],
+        "b": {
+          "c": null
+        }
+      },
+      "value": {
+        "a": [1, 1.5, "x", true, false, null],
+        "b": {
+          "c": null
+        }
+      }
+    },
+    {
+      "name": "an object key set to undefined is left out",
+      "input": {
+        "a": 1,
+        "b": {
+          "$": "undefined"
+        },
+        "c": [
+          {
+            "d": {
+              "$": "undefined"
+            }
+          }
+        ]
+      },
+      "value": {
+        "a": 1,
+        "c": [{}]
+      }
+    },
+    {
+      "name": "undefined in an array is null",
+      "input": {
+        "a": [
+          1,
+          {
+            "$": "undefined"
+          },
+          3
+        ]
+      },
+      "value": {
+        "a": [1, null, 3]
+      }
+    },
+    {
+      "name": "a hole in an array is null",
+      "input": {
+        "a": [
+          1,
+          {
+            "$": "hole"
+          },
+          3
+        ]
+      },
+      "value": {
+        "a": [1, null, 3]
+      }
+    },
+    {
+      "name": "non-finite numbers are null",
+      "input": {
+        "a": {
+          "$": "NaN"
+        },
+        "b": [
+          {
+            "$": "Infinity"
+          },
+          {
+            "$": "-Infinity"
+          }
+        ]
+      },
+      "value": {
+        "a": null,
+        "b": [null, null]
+      }
+    },
+    {
+      "name": "an integer past the safe range throws",
+      "input": {
+        "a": [
+          0,
+          {
+            "$": "unsafe"
+          }
+        ]
+      },
+      "error": ["a", 1]
+    },
+    {
+      "name": "a function throws",
+      "input": {
+        "a": {
+          "b": {
+            "$": "function"
+          }
+        }
+      },
+      "error": ["a", "b"]
+    },
+    {
+      "name": "a bigint throws",
+      "input": {
+        "a": [
+          {
+            "$": "bigint"
+          }
+        ]
+      },
+      "error": ["a", 0]
+    },
+    {
+      "name": "a class instance throws",
+      "input": {
+        "rows": [
+          {},
+          {
+            "$": "instance"
+          }
+        ]
+      },
+      "error": ["rows", 1]
+    },
+    {
+      "name": "a cycle throws",
+      "input": {
+        "a": {
+          "self": {
+            "$": "cycle"
+          }
+        }
+      },
+      "error": ["a", "self"]
+    }
+  ],
+  "received": {
+    "about": "What every client keeps of a value the host sent, as JSON text: snapshots, patches and results alike. Clients check it themselves; hosts send values as written.",
+    "cases": [
+      {
+        "name": "plain data is itself",
+        "json": "{\"a\":[1,\"x\",null,{\"b\":true}]}",
+        "value": {
+          "a": [
+            1,
+            "x",
+            null,
+            {
+              "b": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "__proto__ keys are stripped anywhere",
+        "json": "{\"a\":{\"__proto__\":{\"polluted\":true},\"ok\":1},\"list\":[{\"__proto__\":1,\"x\":1}]}",
+        "value": {
+          "a": {
+            "ok": 1
+          },
+          "list": [
+            {
+              "x": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "prototype is stripped under constructor only",
+        "json": "{\"constructor\":{\"prototype\":{\"polluted\":true},\"ok\":1},\"prototype\":2}",
+        "value": {
+          "constructor": {
+            "ok": 1
+          },
+          "prototype": 2
+        }
+      },
+      {
+        "name": "an integer past the safe range is null",
+        "json": "{\"n\":[9007199254740993]}",
+        "value": {
+          "n": [null]
+        }
+      },
+      {
+        "name": "a NaN token is a protocol error",
+        "json": "{\"n\":NaN}",
+        "error": true
+      },
+      {
+        "name": "nesting deeper than 512 is a protocol error",
+        "json": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+        "error": true
+      }
+    ]
+  }
+}
