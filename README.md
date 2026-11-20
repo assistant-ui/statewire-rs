@@ -20,7 +20,7 @@ For the HTTP transport used by Tress:
 
 ```toml
 [dependencies]
-statewire = { version = "0.1.1", features = ["http"] }
+statewire = { version = "0.2.0", features = ["http"] }
 ```
 
 The default build contains the protocol layer without a network runtime. Enable
@@ -34,8 +34,7 @@ This release targets wire protocol `2026-09-13` and is tested against the
 JavaScript `statewire` 0.19.4 host. Rust crate versions are independent of the
 wire protocol version. The protocol specs live in the harness-sdk docs.
 
-The 0.1.x line preserves the current public API; breaking API changes require a
-new minor version until 1.0. See the [changelog](https://github.com/assistant-ui/statewire-rs/blob/main/CHANGELOG.md)
+Breaking API changes require a new minor version until 1.0. See the [changelog](https://github.com/assistant-ui/statewire-rs/blob/main/CHANGELOG.md)
 for release changes.
 
 ## Development

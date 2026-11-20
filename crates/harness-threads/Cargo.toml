@@ -12,4 +12,4 @@ categories = ["network-programming", "data-structures"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-statewire = { version = "0.1.1", path = "../statewire" }
+statewire = { version = "0.2.0", path = "../statewire" }

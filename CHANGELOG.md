@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - One value rule with harness-sdk's TypeScript and Python statewire (the
   shared table, `tests/fixtures/values.json`, is a copy of harness-sdk's
@@ -15,7 +15,8 @@
     a protocol error (`SessionError::TooDeep`). Packets parse with that limit
     (`values::parse`) in place of serde_json's default of 128, so documents
     128 to 512 deep that other clients read now load here too.
-- Breaking: the `command` signatures above. Wire protocol unchanged.
+- Breaking: the `command` signatures above. `harness-threads` 0.2.0 depends on
+  `statewire` 0.2.0. Wire protocol `2026-09-13` is unchanged.
 
 ## 0.1.1
 
