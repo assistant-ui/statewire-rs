@@ -195,7 +195,7 @@ async fn attach(
                     Message::Close(_) => return Attach::TransportFault,
                     _ => continue,
                 };
-                let packet: Packet = match serde_json::from_str(text.as_str()) {
+                let packet: Packet = match crate::values::parse(text.as_str()) {
                     Ok(packet) => packet,
                     Err(_) => return Attach::TransportFault,
                 };

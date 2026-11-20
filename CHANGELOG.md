@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- One value rule with harness-sdk's TypeScript and Python statewire (the
+  shared table, `tests/fixtures/values.json`, is a copy of harness-sdk's
+  `packages/statewire/core/tests/fixtures/values.json`):
+  - `Session::command` and `Client::command` return `Result<u64, ValueError>`:
+    a param holding an integer past the JS safe range is refused with its
+    path, as in "statewire: can't encode the number 9007199254740992 at rsvp
+    params[0].n: …". serde already writes a non-finite float as `null`.
+  - The client checks what it receives itself: snapshots, patches and results
+    lose `__proto__` keys and `prototype` keys under `constructor`, and read
+    integers past the safe range as `null`. A value nested deeper than 512 is
+    a protocol error (`SessionError::TooDeep`). Packets parse with that limit
+    (`values::parse`) in place of serde_json's default of 128, so documents
+    128 to 512 deep that other clients read now load here too.
+- Breaking: the `command` signatures above. Wire protocol unchanged.
+
 ## 0.1.1
 
 - Preserve HTTP/SSE events when network chunks split a UTF-8 character.

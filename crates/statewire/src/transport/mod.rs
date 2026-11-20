@@ -32,10 +32,19 @@ mod handle {
 
     impl Client {
         /// Queues a command and wakes the connection to send it.
-        pub async fn command(&self, protocol: &str, method: &str, params: Vec<Value>) -> u64 {
-            let seq = self.session.lock().await.command(protocol, method, params);
+        pub async fn command(
+            &self,
+            protocol: &str,
+            method: &str,
+            params: Vec<Value>,
+        ) -> Result<u64, crate::ValueError> {
+            let seq = self
+                .session
+                .lock()
+                .await
+                .command(protocol, method, params)?;
             self.wake.notify_one();
-            seq
+            Ok(seq)
         }
 
         /// Reads from the session under its lock.

@@ -110,7 +110,10 @@ async fn increments_the_live_counter() {
         Some(json!({"count": 0}))
     );
 
-    let seq = client.command("default", "increment", vec![json!(1)]).await;
+    let seq = client
+        .command("default", "increment", vec![json!(1)])
+        .await
+        .unwrap();
     assert_eq!(seq, 1);
 
     let mut saw_state = false;
@@ -133,7 +136,10 @@ async fn increments_the_live_counter() {
         Some(json!({"count": 1}))
     );
 
-    let unknown = client.command("default", "no-such-command", vec![]).await;
+    let unknown = client
+        .command("default", "no-such-command", vec![])
+        .await
+        .unwrap();
     loop {
         if let Event::CommandUpdate {
             answer,
@@ -150,7 +156,8 @@ async fn increments_the_live_counter() {
 
     let commands = client
         .command("default", "statewire/commands", vec![])
-        .await;
+        .await
+        .unwrap();
     loop {
         if let Event::CommandUpdate {
             answer,

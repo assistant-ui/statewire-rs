@@ -194,7 +194,7 @@ async fn attach(
                         Ok(None) => break,
                         Err(_) => return Attach::TransportFault,
                     };
-                    let packet: Packet = match serde_json::from_str(&payload) {
+                    let packet: Packet = match crate::values::parse(&payload) {
                         Ok(packet) => packet,
                         Err(_) => return Attach::TransportFault,
                     };
@@ -364,7 +364,8 @@ async fn post_statements(
         200 => Ok(None),
         409 | 429 => {
             let body = response.bytes().await.map_err(|_| PostOutcome::Fault)?;
-            let refusal: Packet = serde_json::from_slice(&body).map_err(|_| PostOutcome::Fault)?;
+            let text = std::str::from_utf8(&body).map_err(|_| PostOutcome::Fault)?;
+            let refusal: Packet = crate::values::parse(text).map_err(|_| PostOutcome::Fault)?;
             Ok(Some(refusal))
         }
         423 => Err(PostOutcome::Reattach),

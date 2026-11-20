@@ -91,7 +91,10 @@ async fn increments_the_live_counter_over_http() {
         Some(json!({"count": 0}))
     );
 
-    let seq = client.command("default", "increment", vec![json!(1)]).await;
+    let seq = client
+        .command("default", "increment", vec![json!(1)])
+        .await
+        .unwrap();
 
     let mut saw_state = false;
     let mut saw_result = false;
