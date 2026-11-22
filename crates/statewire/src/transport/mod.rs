@@ -1,11 +1,16 @@
 //! Transports drive a [`crate::Session`] over a socket.
+//!
+//! [`ws`] (feature `ws`) is the transport. The crate also carries an HTTP/SSE
+//! transport, private to the crate, that only its own protocol tests use.
 
-#[cfg(feature = "http")]
-pub mod http;
+// Internal: the HTTP/SSE binding of the protocol, kept so the crate's tests
+// cover it against the JavaScript host. Not part of the public API.
+#[cfg(feature = "__http-protocol-tests")]
+mod http;
 #[cfg(feature = "ws")]
 pub mod ws;
 
-#[cfg(any(feature = "http", feature = "ws"))]
+#[cfg(any(feature = "__http-protocol-tests", feature = "ws"))]
 mod handle {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
@@ -96,7 +101,7 @@ mod handle {
     }
 }
 
-#[cfg(any(feature = "http", feature = "ws"))]
+#[cfg(any(feature = "__http-protocol-tests", feature = "ws"))]
 pub(crate) use handle::{backoff_delay, forward, BACKOFF_CEILING, RECEIVE_TIMEOUT};
-#[cfg(any(feature = "http", feature = "ws"))]
+#[cfg(any(feature = "__http-protocol-tests", feature = "ws"))]
 pub use handle::{generate_client_id, Client};

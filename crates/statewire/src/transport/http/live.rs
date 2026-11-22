@@ -1,16 +1,18 @@
 //! Live round trip against a real statewire host over StatewireHttp.
 //!
-//! Points at `STATEWIRE_HTTP_URL` (the instance URL, without `/stream`) when
-//! set; otherwise spawns the counter fixture and requires Node.js and the fixture dependencies.
-
-#![cfg(feature = "http")]
+//! A unit test because the transport is private to the crate. Points at
+//! `STATEWIRE_HTTP_URL` (the instance URL, without `/stream`) when set;
+//! otherwise spawns the counter fixture and requires Node.js and the fixture
+//! dependencies.
 
 use std::process::Stdio;
 use std::time::Duration;
 
 use serde_json::json;
-use statewire::transport::http::{connect, generate_client_id};
-use statewire::{Config, Event, ProtocolOffer, Verdict, VersionRange, WIRE_VERSION};
+
+use super::connect;
+use crate::transport::generate_client_id;
+use crate::{Config, Event, ProtocolOffer, Verdict, VersionRange, WIRE_VERSION};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::timeout;

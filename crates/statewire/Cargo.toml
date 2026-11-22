@@ -22,10 +22,12 @@ reqwest = { version = "0.12", optional = true, default-features = false, feature
 [features]
 default = []
 ws = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite", "dep:rustls"]
-http = ["dep:futures-util", "dep:tokio", "dep:reqwest"]
+# Internal, not public API: compiles the crate-private HTTP/SSE transport so
+# the crate's own protocol tests run it. Enabling it exposes nothing.
+__http-protocol-tests = ["dep:futures-util", "dep:tokio", "dep:reqwest"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["ws"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "io-util"] }

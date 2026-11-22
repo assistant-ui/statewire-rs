@@ -21,7 +21,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
-      - run: cargo test -p statewire --features http --locked
+      - run: cargo test -p statewire --features __http-protocol-tests --locked
       - run: cargo test -p statewire --features ws --locked
       - run: cargo test --workspace --all-features --locked
       - run: cargo doc --workspace --all-features --no-deps --locked

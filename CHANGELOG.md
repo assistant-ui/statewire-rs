@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: the HTTP/SSE transport is no longer public. The `http` feature and
+  `statewire::transport::http` are gone; connect with
+  `statewire::transport::ws::connect` (feature `ws`) and the host's WebSocket
+  endpoint. An open SSE stream keeps a Cloudflare Durable Object from
+  hibernating, so WebSocket is the one transport the crate offers. The HTTP
+  transport stays inside the crate, and its live round trip against the
+  JavaScript host now runs as a unit test under the internal
+  `__http-protocol-tests` feature. Wire protocol `2026-09-13` is unchanged.
+
 ## 0.2.0
 
 - One value rule with harness-sdk's TypeScript and Python statewire (the
