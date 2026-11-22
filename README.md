@@ -26,7 +26,8 @@ statewire = { version = "0.2.0", features = ["ws"] }
 The default build contains the protocol layer without a network runtime. Enable
 `ws` for the WebSocket transport (including WSS with Rustls and WebPKI roots),
 which needs a Tokio runtime. `statewire::transport::ws::connect` takes the
-host's WebSocket endpoint and returns a handle and event receiver; wait for
+thread URL (`https://app.example/threads/t1`; the transport dials its `/ws`)
+and returns a handle and event receiver; wait for
 `Event::Connected` before treating the replicated state as ready. Dropping the
 handle stops the transport task.
 

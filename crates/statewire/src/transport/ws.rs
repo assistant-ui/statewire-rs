@@ -21,6 +21,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::time::{interval, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::uri::{InvalidUri, Uri};
 use tokio_tungstenite::tungstenite::Error as TungsteniteError;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -52,8 +53,10 @@ pub enum WsError {
     InvalidHeader(String),
 }
 
-/// Connects to `url` (the host's `/ws` endpoint) and returns the client
-/// handle plus the session's event stream.
+/// Connects to the thread at `url` and returns the client handle plus the
+/// session's event stream. `url` is the thread URL, as the TypeScript
+/// client takes it: `http(s)` (or `ws(s)`) becomes `ws(s)` and the socket
+/// dials `/ws` after its path, keeping its query.
 ///
 /// The task reconnects on transport faults and `reconnect`/`error` fins,
 /// resending pending durable-lane commands per the admission rules. It stops
@@ -88,8 +91,7 @@ pub async fn connect_with_headers(
         first_message: application_headers(&headers)?,
         upgrade: headers,
     });
-    let separator = if url.contains('?') { '&' } else { '?' };
-    let url = format!("{url}{separator}client={}", config.client_id);
+    let url = socket_url(url, &config.client_id)?;
     url.as_str()
         .into_client_request()
         .map_err(|error| WsError::InvalidUrl(error.to_string()))?;
@@ -115,6 +117,33 @@ pub async fn connect_with_headers(
             _stop: stop_tx,
         },
         events_rx,
+    ))
+}
+
+/// The thread's WebSocket endpoint: `ws(s)://…/<thread>/ws?…&client=<id>`.
+fn socket_url(thread: &str, client_id: &str) -> Result<String, WsError> {
+    let uri: Uri = thread
+        .parse()
+        .map_err(|error: InvalidUri| WsError::InvalidUrl(error.to_string()))?;
+    let scheme = match uri.scheme_str() {
+        Some("http" | "ws") => "ws",
+        Some("https" | "wss") => "wss",
+        _ => {
+            return Err(WsError::InvalidUrl(
+                "the thread URL must use http, https, ws or wss".into(),
+            ))
+        }
+    };
+    let authority = uri
+        .authority()
+        .ok_or_else(|| WsError::InvalidUrl("the thread URL has no host".into()))?;
+    let path = uri.path().trim_end_matches('/');
+    let query = uri
+        .query()
+        .map(|query| format!("{query}&"))
+        .unwrap_or_default();
+    Ok(format!(
+        "{scheme}://{authority}{path}/ws?{query}client={client_id}"
     ))
 }
 
@@ -352,5 +381,33 @@ async fn flush(
         let text = serde_json::to_string(&frame).map_err(|_| ())?;
         socket.send(Message::text(text)).await.map_err(|_| ())?;
         sent = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::socket_url;
+
+    #[test]
+    fn thread_urls_dial_their_ws_endpoint() {
+        let url = |thread: &str| socket_url(thread, "c1");
+        assert_eq!(
+            url("http://localhost:5311/api/thread").unwrap(),
+            "ws://localhost:5311/api/thread/ws?client=c1"
+        );
+        assert_eq!(
+            url("https://app.example/api/threads/main/").unwrap(),
+            "wss://app.example/api/threads/main/ws?client=c1"
+        );
+        assert_eq!(
+            url("wss://app.example/t?tenant=a").unwrap(),
+            "wss://app.example/t/ws?tenant=a&client=c1"
+        );
+        assert_eq!(
+            url("ws://127.0.0.1:1").unwrap(),
+            "ws://127.0.0.1:1/ws?client=c1"
+        );
+        assert!(url("ftp://app.example/thread").is_err());
+        assert!(url("/thread").is_err());
     }
 }

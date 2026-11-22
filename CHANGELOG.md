@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Breaking: `statewire::transport::ws::connect` and `connect_with_headers`
+  take the thread URL, as the TypeScript client does. `http(s)` (or `ws(s)`)
+  becomes `ws(s)` and the socket dials `/ws` after the URL's path, keeping its
+  query: `https://app.example/threads/t1` dials
+  `wss://app.example/threads/t1/ws?client=…`. Migrate: drop the `/ws` suffix
+  from the URL you pass.
 - `statewire::transport::ws::connect_with_headers(url, config, headers)` sends
   application headers (an `http::HeaderMap`, re-exported as
   `transport::ws::HeaderMap`) on every attach and reattach, both on the
