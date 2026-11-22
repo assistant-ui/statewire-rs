@@ -32,8 +32,9 @@ handle stops the transport task.
 
 To authenticate, pass application headers to
 `statewire::transport::ws::connect_with_headers(url, config, headers)`. They
-travel in the first message of every attach, never in the URL, and the host
-checks them in its `authorize` hook. Mark secret values sensitive. A refusal
+travel on the upgrade request and in the first message of every attach,
+never in the URL; the host checks them in its `authorize` hook, and an
+application can also check them before the upgrade. Mark secret values sensitive. A refusal
 (an `unauthorized` or `forbidden` fin, or an HTTP 401/403 on the upgrade)
 stops the transport; connect again with fresh credentials.
 

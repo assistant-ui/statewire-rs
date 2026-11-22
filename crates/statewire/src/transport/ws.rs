@@ -6,11 +6,12 @@
 //! reconnects after 30 seconds of receive silence, and follows each fin's
 //! client action with exponential backoff and jitter.
 //!
-//! Application headers (credentials, account selectors) travel in-band: the
-//! first message of every attach carries them beside the negotiation headers,
-//! as the TypeScript client does. They never go in the URL or on the upgrade
-//! request, so proxies and access logs do not see them. Hosts merge them with
-//! the upgrade request's headers before authorizing; the upgrade's win.
+//! Application headers (credentials, account selectors) travel twice on
+//! every attach, never in the URL: on the upgrade request, for applications
+//! and proxies that authenticate at the HTTP layer, and in-band in the first
+//! message beside the negotiation headers, as the TypeScript client sends
+//! them (browsers can't set upgrade headers). Hosts merge the two before
+//! authorizing, the upgrade's winning; the values are the same.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -66,7 +67,9 @@ pub async fn connect(
 }
 
 /// Connects like [`connect`], sending application `headers` (for example
-/// `authorization`) in the first message of every attach and reattach.
+/// `authorization`) on the upgrade request and in the first message of
+/// every attach and reattach. Redirects are not followed, so the headers
+/// only reach `url`'s origin.
 ///
 /// The headers are fixed for this connection. An `unauthorized` or
 /// `forbidden` fin stops the transport after delivering
@@ -81,7 +84,10 @@ pub async fn connect_with_headers(
     config: Config,
     headers: HeaderMap,
 ) -> Result<(Client, mpsc::UnboundedReceiver<Event>), WsError> {
-    let application = Arc::new(application_headers(&headers)?);
+    let application = Arc::new(Application {
+        first_message: application_headers(&headers)?,
+        upgrade: headers,
+    });
     let separator = if url.contains('?') { '&' } else { '?' };
     let url = format!("{url}{separator}client={}", config.client_id);
     url.as_str()
@@ -131,6 +137,14 @@ fn is_reserved(name: &str) -> bool {
         )
 }
 
+/// The application headers in both of their forms.
+struct Application {
+    /// For the upgrade request; keeps the caller's sensitive marks.
+    upgrade: HeaderMap,
+    /// For the first message's `headers` object.
+    first_message: serde_json::Map<String, Value>,
+}
+
 fn application_headers(headers: &HeaderMap) -> Result<serde_json::Map<String, Value>, WsError> {
     let mut object = serde_json::Map::new();
     for name in headers.keys() {
@@ -160,7 +174,7 @@ fn refuses_attach(status: u16) -> bool {
 
 async fn run(
     url: String,
-    application: Arc<serde_json::Map<String, Value>>,
+    application: Arc<Application>,
     session: Arc<Mutex<Session>>,
     wake: Arc<Notify>,
     events: mpsc::UnboundedSender<Event>,
@@ -214,7 +228,7 @@ enum Attach {
 
 async fn attach(
     url: &str,
-    application: &serde_json::Map<String, Value>,
+    application: &Application,
     session: &Mutex<Session>,
     wake: &Notify,
     events: &mpsc::UnboundedSender<Event>,
@@ -224,6 +238,9 @@ async fn attach(
         Ok(request) => request,
         Err(_) => return Attach::Stopped,
     };
+    for (name, value) in &application.upgrade {
+        request.headers_mut().append(name, value.clone());
+    }
     request.headers_mut().insert(
         "Sec-WebSocket-Protocol",
         WS_SUBPROTOCOL.parse().expect("static header value"),
@@ -237,7 +254,7 @@ async fn attach(
         Err(_) => return Attach::TransportFault,
     };
 
-    let mut headers = application.clone();
+    let mut headers = application.first_message.clone();
     for (name, value) in session.lock().await.attach_headers() {
         headers.insert(name, Value::String(value));
     }

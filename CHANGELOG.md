@@ -4,9 +4,11 @@
 
 - `statewire::transport::ws::connect_with_headers(url, config, headers)` sends
   application headers (an `http::HeaderMap`, re-exported as
-  `transport::ws::HeaderMap`) in the first message of every attach and
-  reattach, beside the negotiation headers, as the TypeScript client does.
-  They never go in the URL or on the upgrade request. `statewire-*` names and
+  `transport::ws::HeaderMap`) on every attach and reattach, both on the
+  upgrade request (for apps that authenticate at the HTTP layer) and in the
+  first message beside the negotiation headers (as the TypeScript client
+  does). Hosts merge the two. The headers never go in the URL, and redirects
+  are not followed. `statewire-*` names and
   the WebSocket handshake's headers are refused (`WsError::ReservedHeader`),
   as are values that aren't text (`WsError::InvalidHeader`). `connect` is
   `connect_with_headers` with no headers.

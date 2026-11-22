@@ -184,11 +184,11 @@ async fn increments_the_live_counter() {
     }
 }
 
-/// The fixture's `/private/ws` host authorizes from the first message's
+/// The fixture's `/private/ws` host authorizes from the application
 /// headers: the right bearer token attaches, a missing one is unauthorized,
 /// a wrong one forbidden, and either refusal ends the transport.
 #[tokio::test]
-async fn the_host_authorizes_first_message_headers() {
+async fn the_host_authorizes_application_headers() {
     let mut fixture = fixture().await;
     let private = fixture.url.replace("/ws", "/private/ws");
     let bearer = |token: &str| {

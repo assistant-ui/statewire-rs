@@ -1,9 +1,11 @@
 //! Application headers on the WebSocket transport, against a scripted
-//! server: they ride in the first message of every attach, never in the URL
-//! or on the upgrade request, and an authorization refusal stops the
+//! server: they ride on the upgrade request and in the first message of
+//! every attach, never in the URL, and an authorization refusal stops the
 //! transport.
 
 #![cfg(feature = "ws")]
+// tungstenite's handshake callback returns its large `ErrorResponse`.
+#![allow(clippy::result_large_err)]
 
 use std::time::Duration;
 
@@ -44,16 +46,24 @@ fn credentials() -> HeaderMap {
 }
 
 /// Accepts one upgrade; returns the socket, the request URI and whether the
-/// upgrade request carried any application header.
+/// upgrade request carried the application headers.
 async fn accept(listener: &TcpListener) -> (WebSocketStream<TcpStream>, String, bool) {
     let (stream, _) = listener.accept().await.unwrap();
     let mut uri = String::new();
-    let mut leaked = false;
+    let mut carried = false;
     let socket =
         tokio_tungstenite::accept_hdr_async(stream, |request: &Request, mut response: Response| {
             uri = request.uri().to_string();
-            leaked = request.headers().contains_key("authorization")
-                || request.headers().contains_key("x-app-account");
+            let values = |name| {
+                request
+                    .headers()
+                    .get_all(name)
+                    .iter()
+                    .map(|value| value.to_str().unwrap())
+                    .collect::<Vec<_>>()
+            };
+            carried = values("authorization") == ["Bearer fixture-token"]
+                && values("x-app-account") == ["alice", "bob"];
             response
                 .headers_mut()
                 .insert("sec-websocket-protocol", "statewire.v1".parse().unwrap());
@@ -61,7 +71,7 @@ async fn accept(listener: &TcpListener) -> (WebSocketStream<TcpStream>, String, 
         })
         .await
         .unwrap();
-    (socket, uri, leaked)
+    (socket, uri, carried)
 }
 
 async fn first_message(socket: &mut WebSocketStream<TcpStream>) -> Value {
@@ -121,9 +131,9 @@ async fn headers_ride_every_attach_and_a_refusal_stops_the_transport() {
             .unwrap();
 
         // First attach: accepted, then the host asks for a reconnect.
-        let (mut socket, uri, leaked) = accept(&listener).await;
+        let (mut socket, uri, carried) = accept(&listener).await;
         assert_eq!(uri, "/thread/ws?client=0123456789abcdef0123456789abcdef");
-        assert!(!leaked, "application headers must stay off the upgrade");
+        assert!(carried, "the upgrade request must carry the headers");
         assert_carries_credentials(&first_message(&mut socket).await);
         socket.send(Message::text(HELLO)).await.unwrap();
         socket
@@ -136,8 +146,8 @@ async fn headers_ride_every_attach_and_a_refusal_stops_the_transport() {
         ));
 
         // Reattach: the same headers again; this time the host refuses them.
-        let (mut socket, _, leaked) = accept(&listener).await;
-        assert!(!leaked);
+        let (mut socket, _, carried) = accept(&listener).await;
+        assert!(carried);
         assert_carries_credentials(&first_message(&mut socket).await);
         socket
             .send(Message::text(
