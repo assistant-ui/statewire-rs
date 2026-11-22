@@ -6,7 +6,7 @@ Rust clients for the [harness-sdk](https://github.com/assistant-ui/harness-sdk) 
 
 | Crate | What it is |
 | --- | --- |
-| `statewire` | Client for the Statewire protocol: one JSON document table replicated from a host, typed commands back. Document encoding, statepatch application, envelopes, negotiation, the sans-IO session state machine, and `ws` / `http` transports. |
+| `statewire` | Client for the Statewire protocol: one JSON document table replicated from a host, typed commands back. Document encoding, statepatch application, envelopes, negotiation, the sans-IO session state machine, and the `ws` (WebSocket) transport. |
 | `harness-threads` | Types for the harness-sdk thread and runs protocols on top of `statewire`: the main document, message documents, run states, and the `run/*` / `thread/*` commands. Bindings only — all behavior lives in the host. |
 
 ## Install
@@ -16,17 +16,17 @@ cargo add statewire
 cargo add harness-threads
 ```
 
-For the HTTP transport used by Tress:
+To connect over WebSocket:
 
 ```toml
 [dependencies]
-statewire = { version = "0.2.0", features = ["http"] }
+statewire = { version = "0.2.0", features = ["ws"] }
 ```
 
 The default build contains the protocol layer without a network runtime. Enable
-`http` for HTTP/SSE (including HTTPS), `ws` for WebSocket (including WSS with
-Rustls and WebPKI roots), or both. Applications using a transport need a Tokio
-runtime. A transport's `connect` returns a handle and event receiver; wait for
+`ws` for the WebSocket transport (including WSS with Rustls and WebPKI roots),
+which needs a Tokio runtime. `statewire::transport::ws::connect` takes the
+host's WebSocket endpoint and returns a handle and event receiver; wait for
 `Event::Connected` before treating the replicated state as ready. Dropping the
 handle stops the transport task.
 
@@ -44,13 +44,16 @@ npm ci --prefix tests/fixtures/counter-host --no-audit --no-fund
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --locked
-cargo test -p statewire --features http --locked
+cargo test -p statewire --features __http-protocol-tests --locked
 cargo test -p statewire --features ws --locked
 cargo test --workspace --all-features --locked
 cargo package -p statewire --all-features --locked
 ```
 
 The transport integration tests require Node.js and the fixture dependencies;
-they fail if the host cannot start. To test an already running counter host,
-set `STATEWIRE_HTTP_URL` (the instance URL, without `/stream`) or
-`STATEWIRE_WS_URL` (the WebSocket endpoint).
+they fail if the host cannot start. The crate also keeps a private HTTP/SSE
+transport so the protocol's HTTP binding stays tested; the internal
+`__http-protocol-tests` feature compiles it for those tests and is not public
+API. To test an already running counter host, set `STATEWIRE_WS_URL` (the
+WebSocket endpoint) or `STATEWIRE_HTTP_URL` (the instance URL, without
+`/stream`).

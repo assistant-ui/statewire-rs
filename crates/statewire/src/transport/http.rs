@@ -1,5 +1,9 @@
 //! StatewireHttp: packets over an SSE stream, frames over `POST /frames`.
 //!
+//! Internal to the crate: applications use the WebSocket transport. This
+//! binding stays so the protocol tests (`live`, against the JavaScript
+//! counter host) keep covering it.
+//!
 //! [`connect`] spawns a task that attaches with `GET {url}/stream`, reads
 //! one packet per SSE `data:` event (`: ping` comments count as liveness),
 //! and submits frames through `POST {url}/frames` under the stream's
@@ -7,6 +11,9 @@
 //! one-POST-per-lane rule for every frame shape. Refusal statuses follow the
 //! transport table: 409 reconciles watermarks, 429 waits `syn.retry`, 423
 //! reattaches, 413 splits the frame, 400 stops.
+
+// Only the tests call into this module.
+#![cfg_attr(not(test), allow(dead_code))]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,24 +26,22 @@ use super::{backoff_delay, forward, Client, BACKOFF_CEILING, RECEIVE_TIMEOUT};
 use crate::session::{Config, Event, FinAction, Session};
 use crate::wire::{Frame, Packet, Statement};
 
-pub use super::generate_client_id;
-
 /// Client id header for `GET /stream`.
-pub const CLIENT_ID_HEADER: &str = "Statewire-Client-Id";
+pub(crate) const CLIENT_ID_HEADER: &str = "Statewire-Client-Id";
 /// Lease header binding `POST /frames` to an attach.
-pub const LEASE_HEADER: &str = "Statewire-Lease";
+pub(crate) const LEASE_HEADER: &str = "Statewire-Lease";
 
 const POST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
-pub enum HttpError {
+pub(crate) enum HttpError {
     #[error("invalid url: {0}")]
     InvalidUrl(String),
 }
 
 /// Connects to `url` (the instance URL, without the `/stream` suffix) and
 /// returns the client handle plus the session's event stream.
-pub async fn connect(
+pub(crate) async fn connect(
     url: &str,
     config: Config,
 ) -> Result<(Client, mpsc::UnboundedReceiver<Event>), HttpError> {
@@ -383,6 +388,9 @@ async fn post_statements(
         _ => Err(PostOutcome::Fault),
     }
 }
+
+#[cfg(test)]
+mod live;
 
 #[cfg(test)]
 mod tests {

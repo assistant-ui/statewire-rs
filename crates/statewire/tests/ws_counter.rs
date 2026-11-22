@@ -76,7 +76,8 @@ async fn next_event(events: &mut UnboundedReceiver<Event>) -> Event {
 }
 
 /// A ws-only build must have a TLS backend and crypto provider even when
-/// reqwest (the HTTP feature) is not present to enable them transitively.
+/// reqwest (only built for the internal HTTP protocol tests) is not present to
+/// enable them transitively.
 #[tokio::test]
 async fn secure_websocket_starts_a_tls_handshake() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
