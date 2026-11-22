@@ -30,6 +30,13 @@ host's WebSocket endpoint and returns a handle and event receiver; wait for
 `Event::Connected` before treating the replicated state as ready. Dropping the
 handle stops the transport task.
 
+To authenticate, pass application headers to
+`statewire::transport::ws::connect_with_headers(url, config, headers)`. They
+travel in the first message of every attach, never in the URL, and the host
+checks them in its `authorize` hook. Mark secret values sensitive. A refusal
+(an `unauthorized` or `forbidden` fin, or an HTTP 401/403 on the upgrade)
+stops the transport; connect again with fresh credentials.
+
 This release targets wire protocol `2026-09-13` and is tested against the
 JavaScript `statewire` 0.19.4 host. Rust crate versions are independent of the
 wire protocol version. The protocol specs live in the harness-sdk docs.

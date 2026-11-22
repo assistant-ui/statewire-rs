@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `statewire::transport::ws::connect_with_headers(url, config, headers)` sends
+  application headers (an `http::HeaderMap`, re-exported as
+  `transport::ws::HeaderMap`) in the first message of every attach and
+  reattach, beside the negotiation headers, as the TypeScript client does.
+  They never go in the URL or on the upgrade request. `statewire-*` names and
+  the WebSocket handshake's headers are refused (`WsError::ReservedHeader`),
+  as are values that aren't text (`WsError::InvalidHeader`). `connect` is
+  `connect_with_headers` with no headers.
+- The WebSocket transport stops when the host refuses an attach: after an
+  `unauthorized` fin (which it already did) and now also when the upgrade
+  request gets HTTP 3xx, 400, 401, 403, 404, 406 or 410, where it used to
+  retry forever. To retry with fresh credentials, connect again.
 - Breaking: the HTTP/SSE transport is no longer public. The `http` feature and
   `statewire::transport::http` are gone; connect with
   `statewire::transport::ws::connect` (feature `ws`) and the host's WebSocket

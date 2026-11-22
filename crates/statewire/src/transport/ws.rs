@@ -5,6 +5,12 @@
 //! flushes queued frames, sends heartbeats after 15 seconds of send silence,
 //! reconnects after 30 seconds of receive silence, and follows each fin's
 //! client action with exponential backoff and jitter.
+//!
+//! Application headers (credentials, account selectors) travel in-band: the
+//! first message of every attach carries them beside the negotiation headers,
+//! as the TypeScript client does. They never go in the URL or on the upgrade
+//! request, so proxies and access logs do not see them. Hosts merge them with
+//! the upgrade request's headers before authorizing; the upgrade's win.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,6 +20,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::time::{interval, Instant, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::Error as TungsteniteError;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::{backoff_delay, forward, Client, BACKOFF_CEILING, RECEIVE_TIMEOUT};
@@ -21,6 +28,9 @@ use crate::session::{Config, Event, FinAction, Session};
 use crate::wire::Packet;
 
 pub use super::generate_client_id;
+/// The header map [`connect_with_headers`] takes (the `http` crate's, the one
+/// `reqwest` also uses).
+pub use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderName, HeaderValue};
 
 /// The fixed bootstrap subprotocol.
 pub const WS_SUBPROTOCOL: &str = "statewire.v1";
@@ -31,6 +41,14 @@ const SEND_HEARTBEAT_AFTER: Duration = Duration::from_secs(15);
 pub enum WsError {
     #[error("invalid url: {0}")]
     InvalidUrl(String),
+    /// A header the transport sets itself: `statewire-*` negotiation headers
+    /// and the WebSocket handshake's own headers.
+    #[error("request header is managed by the transport: {0}")]
+    ReservedHeader(String),
+    /// A header value that is not visible ASCII text, which the first
+    /// message's JSON object of strings cannot carry. Only the name is shown.
+    #[error("request header value is not text: {0}")]
+    InvalidHeader(String),
 }
 
 /// Connects to `url` (the host's `/ws` endpoint) and returns the client
@@ -44,6 +62,26 @@ pub async fn connect(
     url: &str,
     config: Config,
 ) -> Result<(Client, mpsc::UnboundedReceiver<Event>), WsError> {
+    connect_with_headers(url, config, HeaderMap::new()).await
+}
+
+/// Connects like [`connect`], sending application `headers` (for example
+/// `authorization`) in the first message of every attach and reattach.
+///
+/// The headers are fixed for this connection. An `unauthorized` or
+/// `forbidden` fin stops the transport after delivering
+/// [`Event::Finished`], and so does an HTTP 3xx, 400, 401, 403, 404, 406 or
+/// 410 answer to the upgrade request; to retry with fresh credentials, drop
+/// the client and connect again. `statewire-*` names and the WebSocket
+/// handshake's headers are reserved ([`WsError::ReservedHeader`]). Repeated
+/// names are joined with `, `. Mark secret values sensitive so the caller's
+/// own logging of the map redacts them; errors name headers, never values.
+pub async fn connect_with_headers(
+    url: &str,
+    config: Config,
+    headers: HeaderMap,
+) -> Result<(Client, mpsc::UnboundedReceiver<Event>), WsError> {
+    let application = Arc::new(application_headers(&headers)?);
     let separator = if url.contains('?') { '&' } else { '?' };
     let url = format!("{url}{separator}client={}", config.client_id);
     url.as_str()
@@ -55,7 +93,14 @@ pub async fn connect(
     let (events_tx, events_rx) = mpsc::unbounded_channel();
     let (stop_tx, stop_rx) = mpsc::channel(1);
 
-    tokio::spawn(run(url, session.clone(), wake.clone(), events_tx, stop_rx));
+    tokio::spawn(run(
+        url,
+        application,
+        session.clone(),
+        wake.clone(),
+        events_tx,
+        stop_rx,
+    ));
 
     Ok((
         Client {
@@ -67,8 +112,55 @@ pub async fn connect(
     ))
 }
 
+/// Header names the transport owns. The host merges first-message headers
+/// with the upgrade request's case-insensitively and refuses duplicates, so
+/// an application header may not shadow either.
+fn is_reserved(name: &str) -> bool {
+    name.starts_with("statewire-")
+        || name.starts_with("sec-websocket-")
+        || matches!(
+            name,
+            "host"
+                | "connection"
+                | "upgrade"
+                | "content-length"
+                | "content-type"
+                | "transfer-encoding"
+                | "te"
+                | "trailer"
+        )
+}
+
+fn application_headers(headers: &HeaderMap) -> Result<serde_json::Map<String, Value>, WsError> {
+    let mut object = serde_json::Map::new();
+    for name in headers.keys() {
+        let name = name.as_str();
+        if is_reserved(name) {
+            return Err(WsError::ReservedHeader(name.to_owned()));
+        }
+        let mut joined = String::new();
+        for value in headers.get_all(name) {
+            let text = value
+                .to_str()
+                .map_err(|_| WsError::InvalidHeader(name.to_owned()))?;
+            if !joined.is_empty() {
+                joined.push_str(", ");
+            }
+            joined.push_str(text);
+        }
+        object.insert(name.to_owned(), Value::String(joined));
+    }
+    Ok(object)
+}
+
+/// Upgrade refusals that retrying with the same request cannot fix.
+fn refuses_attach(status: u16) -> bool {
+    matches!(status, 300..=399 | 400 | 401 | 403 | 404 | 406 | 410)
+}
+
 async fn run(
     url: String,
+    application: Arc<serde_json::Map<String, Value>>,
     session: Arc<Mutex<Session>>,
     wake: Arc<Notify>,
     events: mpsc::UnboundedSender<Event>,
@@ -86,7 +178,7 @@ async fn run(
         }
         min_delay = Duration::ZERO;
 
-        match attach(&url, &session, &wake, &events, &mut stop).await {
+        match attach(&url, &application, &session, &wake, &events, &mut stop).await {
             Attach::Stopped => return,
             Attach::Fin(action) => match action {
                 FinAction::Reconnect {
@@ -122,6 +214,7 @@ enum Attach {
 
 async fn attach(
     url: &str,
+    application: &serde_json::Map<String, Value>,
     session: &Mutex<Session>,
     wake: &Notify,
     events: &mpsc::UnboundedSender<Event>,
@@ -138,16 +231,16 @@ async fn attach(
 
     let (mut socket, _response) = match tokio_tungstenite::connect_async(request).await {
         Ok(connected) => connected,
+        Err(TungsteniteError::Http(response)) if refuses_attach(response.status().as_u16()) => {
+            return Attach::Fin(FinAction::Stop { is_error: true })
+        }
         Err(_) => return Attach::TransportFault,
     };
 
-    let headers: serde_json::Map<String, Value> = session
-        .lock()
-        .await
-        .attach_headers()
-        .into_iter()
-        .map(|(name, value)| (name, Value::String(value)))
-        .collect();
+    let mut headers = application.clone();
+    for (name, value) in session.lock().await.attach_headers() {
+        headers.insert(name, Value::String(value));
+    }
     let initial = serde_json::json!({ "headers": headers });
     if socket
         .send(Message::text(initial.to_string()))
