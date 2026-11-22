@@ -125,7 +125,7 @@ async fn headers_ride_every_attach_and_a_refusal_stops_the_transport() {
         ("forbidden", FinAction::Stop { is_error: true }),
     ] {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("ws://{}/thread/ws", listener.local_addr().unwrap());
+        let url = format!("http://{}/thread", listener.local_addr().unwrap());
         let (_client, mut events) = connect_with_headers(&url, config(), credentials())
             .await
             .unwrap();
@@ -171,7 +171,7 @@ async fn headers_ride_every_attach_and_a_refusal_stops_the_transport() {
 async fn an_upgrade_refusal_stops_without_retrying() {
     for status in [401, 403, 404] {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("ws://{}/ws", listener.local_addr().unwrap());
+        let url = format!("http://{}", listener.local_addr().unwrap());
         let (_client, mut events) = connect_with_headers(&url, config(), credentials())
             .await
             .unwrap();
@@ -209,7 +209,7 @@ async fn transport_headers_are_reserved() {
             statewire::transport::ws::HeaderName::from_static(name),
             HeaderValue::from_static("override"),
         );
-        match connect_with_headers("ws://127.0.0.1:1/ws", config(), headers).await {
+        match connect_with_headers("http://127.0.0.1:1", config(), headers).await {
             Err(WsError::ReservedHeader(reserved)) => assert_eq!(reserved, name),
             _ => panic!("{name} must be reserved"),
         }
@@ -218,7 +218,7 @@ async fn transport_headers_are_reserved() {
     let mut secret = HeaderValue::from_bytes(b"secret \xff").unwrap();
     secret.set_sensitive(true);
     headers.insert("authorization", secret);
-    match connect_with_headers("ws://127.0.0.1:1/ws", config(), headers).await {
+    match connect_with_headers("http://127.0.0.1:1", config(), headers).await {
         Err(error @ WsError::InvalidHeader(_)) => {
             assert!(!error.to_string().contains("secret"));
         }

@@ -55,7 +55,7 @@ async fn fixture() -> Fixture {
         .trim()
         .to_owned();
     Fixture {
-        url: format!("ws://127.0.0.1:{port}/ws"),
+        url: format!("http://127.0.0.1:{port}"),
         child: Some(child),
     }
 }
@@ -85,7 +85,7 @@ async fn next_event(events: &mut UnboundedReceiver<Event>) -> Event {
 #[tokio::test]
 async fn secure_websocket_starts_a_tls_handshake() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("wss://{}/ws", listener.local_addr().unwrap());
+    let url = format!("https://{}", listener.local_addr().unwrap());
     let (client, _events) = connect(&url, config()).await.unwrap();
     timeout(Duration::from_secs(5), async {
         let (mut stream, _) = listener.accept().await.unwrap();
@@ -184,13 +184,13 @@ async fn increments_the_live_counter() {
     }
 }
 
-/// The fixture's `/private/ws` host authorizes from the application
+/// The fixture's `/private` host authorizes from the application
 /// headers: the right bearer token attaches, a missing one is unauthorized,
 /// a wrong one forbidden, and either refusal ends the transport.
 #[tokio::test]
 async fn the_host_authorizes_application_headers() {
     let mut fixture = fixture().await;
-    let private = fixture.url.replace("/ws", "/private/ws");
+    let private = format!("{}/private", fixture.url);
     let bearer = |token: &str| {
         let mut headers = HeaderMap::new();
         let mut value = HeaderValue::from_str(&format!("Bearer {token}")).unwrap();
