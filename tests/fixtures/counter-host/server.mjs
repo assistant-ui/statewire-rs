@@ -4,6 +4,10 @@
 //
 // Usage: npm install && npm start [port]
 // Prints "listening <port>" once the socket is accepting connections.
+//
+// `/private/ws` serves a second counter whose host authorizes each attach:
+// `authorization: Bearer fixture-token` is let in, a missing credential is
+// refused as unauthorized (401) and any other as forbidden (403).
 
 import { createServer } from "node:http";
 import { Readable } from "node:stream";
@@ -15,6 +19,17 @@ const WS_SUBPROTOCOL = "statewire.v1";
 const CLIENT_ID = /^[A-Za-z0-9._~-]{1,256}$/;
 
 const host = StatewireSocketHost(createCounterElement());
+const privateHost = StatewireSocketHost(createCounterElement(), {
+  authorize: ({ headers }) => {
+    if (headers.authorization === undefined) {
+      throw new Response(null, { status: 401 });
+    }
+    if (headers.authorization !== "Bearer fixture-token") {
+      throw new Response(null, { status: 403 });
+    }
+    return { account: headers["x-account"] ?? null };
+  },
+});
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, "http://localhost");
@@ -64,8 +79,9 @@ server.on("upgrade", (request, socket, head) => {
     socket.destroy();
     return;
   }
+  const target = url.pathname === "/private/ws" ? privateHost : host;
   wss.handleUpgrade(request, socket, head, (ws) => {
-    const conn = host.connect(
+    const conn = target.connect(
       clientId,
       {
         send: (data) => ws.send(data),

@@ -9,8 +9,12 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use statewire::transport::ws::{connect, generate_client_id};
-use statewire::{Config, Event, ProtocolOffer, Verdict, VersionRange, WIRE_VERSION};
+use statewire::transport::ws::{
+    connect, connect_with_headers, generate_client_id, HeaderMap, HeaderValue,
+};
+use statewire::{
+    Config, Event, FinAction, FinReason, ProtocolOffer, Verdict, VersionRange, WIRE_VERSION,
+};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::timeout;
@@ -173,6 +177,79 @@ async fn increments_the_live_counter() {
                 break;
             }
         }
+    }
+
+    if let Some(child) = fixture.child.as_mut() {
+        let _ = child.kill().await;
+    }
+}
+
+/// The fixture's `/private/ws` host authorizes from the application
+/// headers: the right bearer token attaches, a missing one is unauthorized,
+/// a wrong one forbidden, and either refusal ends the transport.
+#[tokio::test]
+async fn the_host_authorizes_application_headers() {
+    let mut fixture = fixture().await;
+    let private = fixture.url.replace("/ws", "/private/ws");
+    let bearer = |token: &str| {
+        let mut headers = HeaderMap::new();
+        let mut value = HeaderValue::from_str(&format!("Bearer {token}")).unwrap();
+        value.set_sensitive(true);
+        headers.insert("authorization", value);
+        headers
+    };
+
+    let (client, mut events) = connect_with_headers(&private, config(), bearer("fixture-token"))
+        .await
+        .unwrap();
+    let connected = next_event(&mut events).await;
+    assert!(
+        matches!(connected, Event::Connected { .. }),
+        "expected Connected, got {connected:?}"
+    );
+    let seq = client
+        .command("default", "increment", vec![json!(2)])
+        .await
+        .unwrap();
+    loop {
+        if let Event::CommandUpdate {
+            answer,
+            terminal: true,
+        } = next_event(&mut events).await
+        {
+            assert_eq!(answer.seq, seq);
+            assert_eq!(answer.verdict, Some(Verdict::Result));
+            break;
+        }
+    }
+    drop(client);
+
+    for (headers, reason, action) in [
+        (
+            HeaderMap::new(),
+            FinReason::Unauthorized,
+            FinAction::RefreshCredentials,
+        ),
+        (
+            bearer("wrong-token"),
+            FinReason::Forbidden,
+            FinAction::Stop { is_error: true },
+        ),
+    ] {
+        let (_client, mut events) = connect_with_headers(&private, config(), headers)
+            .await
+            .unwrap();
+        match next_event(&mut events).await {
+            Event::Finished { fin, action: got } => {
+                assert_eq!(fin.reason, reason);
+                assert_eq!(got, action);
+            }
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        assert!(timeout(Duration::from_secs(3), events.recv())
+            .await
+            .expect("a refusal must end the transport")
+            .is_none());
     }
 
     if let Some(child) = fixture.child.as_mut() {
