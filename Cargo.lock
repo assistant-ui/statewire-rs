@@ -271,7 +271,7 @@ dependencies = [
 
 [[package]]
 name = "harness-threads"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -942,7 +942,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "statewire"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "futures-util",
  "reqwest",
