@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Breaking: `statewire::transport::ws::connect` and `connect_with_headers`
   take the thread URL, as the TypeScript client does. `http(s)` (or `ws(s)`)
@@ -30,6 +30,8 @@
   transport stays inside the crate, and its live round trip against the
   JavaScript host now runs as a unit test under the internal
   `__http-protocol-tests` feature. Wire protocol `2026-09-13` is unchanged.
+- `harness-threads` 0.3.0 depends on `statewire` 0.3.0; its own API is
+  unchanged.
 
 ## 0.2.0
 

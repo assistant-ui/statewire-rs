@@ -20,7 +20,7 @@ To connect over WebSocket:
 
 ```toml
 [dependencies]
-statewire = { version = "0.2.0", features = ["ws"] }
+statewire = { version = "0.3.0", features = ["ws"] }
 ```
 
 The default build contains the protocol layer without a network runtime. Enable
